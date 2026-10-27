@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>BD Ludo</title>
+<style>
+:root{--bg:#0c1b2a;--panel:#13283a;--gold:#ffd34e;--text:#f6f8fb}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#1a3c4e,var(--bg) 65%);color:var(--text);font-family:system-ui,"Noto Sans Bengali",sans-serif;text-align:center;min-height:100vh}
+header{padding:14px 10px 5px}h1{margin:0;color:var(--gold);font-size:clamp(25px,7vw,36px)}.sub{margin:3px 0 8px;color:#c5d7e3;font-size:13px}
+main{max-width:560px;margin:auto;padding:8px 10px 24px}.panel{background:rgba(19,40,58,.9);border:1px solid #35556b;border-radius:16px;padding:12px;margin:8px 0 12px;box-shadow:0 8px 25px #0003}
+.toprow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.turn{font-weight:800;font-size:17px}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#203d50;font-size:12px;color:#dbeaf3}
+#board{display:block;width:min(94vw,500px);height:min(94vw,500px);margin:8px auto;border-radius:8px;touch-action:manipulation;background:#fff;box-shadow:0 8px 25px #0005}
+.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}#dice{width:60px;height:60px;display:grid;place-items:center;background:#fff;color:#172638;border-radius:14px;font-size:37px;box-shadow:inset 0 -4px #d7dce2;font-weight:bold}
+button{border:0;border-radius:12px;padding:12px 17px;font-size:16px;font-weight:800;cursor:pointer;background:var(--gold);color:#192536}button:disabled{opacity:.45;cursor:not-allowed}.secondary{background:#d8e4ec}.hint{font-size:13px;line-height:1.55;color:#d2e0e9;margin:8px 0 0}.players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;text-align:left;margin-top:10px}.player{padding:8px 10px;border-radius:10px;background:#20384b;font-size:13px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.red{background:#ef4444}.green{background:#22a06b}.yellow{background:#f4ca35}.blue{background:#3386ef}.footer{font-size:11px;color:#8fa9ba;margin-top:12px}
+</style></head><body>
+<header><h1>🎲 BD Ludo</h1><p class="sub">চার খেলোয়াড়ের লুডু • একই মোবাইলে খেলুন</p></header>
+<main><section class="panel"><div class="toprow"><div id="turn" class="turn">🔴 লাল খেলোয়াড়ের পালা</div><span id="state" class="badge">নতুন খেলা</span></div><div class="players"><div class="player"><span class="dot red"></span>লাল: <b id="score0">0/4</b> ঘরে</div><div class="player"><span class="dot green"></span>সবুজ: <b id="score1">0/4</b> ঘরে</div><div class="player"><span class="dot yellow"></span>হলুদ: <b id="score2">0/4</b> ঘরে</div><div class="player"><span class="dot blue"></span>নীল: <b id="score3">0/4</b> ঘরে</div></div></section>
+<canvas id="board" width="600" height="600" aria-label="Ludo board"></canvas>
+<section class="panel"><div class="controls"><div id="dice">⚀</div><button id="roll">🎲 পাশা ফেলুন</button><button id="restart" class="secondary">নতুন গেম</button></div><p id="message" class="hint">পাশা ফেলুন। ৬ পেলে গুটি ঘর থেকে বের হবে। তারপর যে গুটি চালাতে চান, সেটিতে চাপ দিন।</p></section>
+<p class="footer">ডেমো সংস্করণ • স্থানীয়ভাবে ২–৪ জন খেলতে পারবেন • অনলাইন খেলা এতে নেই</p></main>
+<script>
+(()=>{
+const canvas=document.getElementById('board'),ctx=canvas.getContext('2d');
+const colors=['#ef4444','#22a06b','#f4ca35','#3386ef'];
+const names=['লাল','সবুজ','হলুদ','নীল']; const emojis=['🔴','🟢','🟡','🔵'];
+// 52-cell outer track, in board-grid coordinates (row, column).
+const track=[[6,1],[6,2],[6,3],[6,4],[6,5],[5,6],[4,6],[3,6],[2,6],[1,6],[0,6],[0,7],[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,9],[6,10],[6,11],[6,12],[6,13],[6,14],[7,14],[8,14],[8,13],[8,12],[8,11],[8,10],[8,9],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[14,7],[14,6],[13,6],[12,6],[11,6],[10,6],[9,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0]];
+const starts=[0,13,26,39];
+const lanes=[[[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],[[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],[[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],[[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]]];
+const safe=new Set([0,8,13,21,26,34,39,47]);
+let players,tokens,current,dice,rolled,finished=false,legal=[];
+function reset(){players=4;tokens=Array.from({length:4},()=>Array.from({length:4},()=>({pos:-1})));current=0;dice=0;rolled=false;finished=false;legal=[];document.getElementById('dice').textContent='⚀';document.getElementById('state').textContent='নতুন খেলা';document.getElementById('message').textContent='পাশা ফেলুন। ৬ পেলে গুটি ঘর থেকে বের হবে। তারপর যে গুটি চালাতে চান, সেটিতে চাপ দিন।';render();updateUI()}
+function xy(cell){let s=600/15;return {x:(cell[1]+.5)*s,y:(cell[0]+.5)*s}}
+function rectCell(r,c,color,stroke='#cbd5e1'){let s=40;ctx.fillStyle=color;ctx.fillRect(c*s,r*s,s,s);ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.strokeRect(c*s,r*s,s,s)}
+function drawBase(r,c,color){ctx.fillStyle=color;ctx.fillRect(c*40,r*40,6*40,6*40);ctx.fillStyle='#fff';ctx.fillRect(c*40+24,r*40+24,192,192);ctx.strokeStyle='#ffffff';ctx.lineWidth=3;for(let yy=0;yy<2;yy++)for(let xx=0;xx<2;xx++){ctx.beginPath();ctx.arc(c*40+80+xx*80,r*40+80+yy*80,23,0,Math.PI*2);ctx.fillStyle=color+'25';ctx.fill();ctx.strokeStyle=color;ctx.stroke()}}
+function render(){ctx.clearRect(0,0,600,600);ctx.fillStyle='#fff';ctx.fillRect(0,0,600,600);
+// corner home areas
+const bases=[[0,0],[0,9],[9,9],[9,0]];bases.forEach((b,i)=>drawBase(b[0],b[1],colors[i]));
+// track squares
+track.forEach((cell,i)=>{let [r,c]=cell;rectCell(r,c,safe.has(i)?'#fef3c7':'#ffffff');if(safe.has(i)){let p=xy(cell);ctx.fillStyle='#64748b';ctx.font='bold 23px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('★',p.x,p.y)}});
+// home lanes
+lanes.forEach((lane,i)=>lane.forEach(cell=>rectCell(cell[0],cell[1],colors[i]+'88')));
+// center triangles
+ctx.beginPath();ctx.moveTo(240,240);ctx.lineTo(360,240);ctx.lineTo(300,300);ctx.closePath();ctx.fillStyle=colors[1];ctx.fill();
+ctx.beginPath();ctx.moveTo(360,240);ctx.lineTo(360,360);ctx.lineTo(300,300);ctx.closePath();ctx.fillStyle=colors[2];ctx.fill();
+ctx.beginPath();ctx.moveTo(360,360);ctx.lineTo(240,360);ctx.lineTo(300,300);ctx.closePath();ctx.fillStyle=colors[3];ctx.fill();
+ctx.beginPath();ctx.moveTo(240,360);ctx.lineTo(240,240);ctx.lineTo(300,300);ctx.closePath();ctx.fillStyle=colors[0];ctx.fill();
+// draw tokens with offsets when sharing a square
+let occupied={};tokens.forEach((arr,pi)=>arr.forEach((t,ti)=>{let cell,groupKey;if(t.pos===-1){let b=bases[pi],offs=[[1,1],[3,1],[1,3],[3,3]][ti];cell=[b[0]+offs[0],b[1]+offs[1]];groupKey='home'+pi+ti}else if(t.pos<52){let idx=(starts[pi]+t.pos)%52;cell=track[idx];groupKey='track'+idx}else if(t.pos<58){cell=lanes[pi][t.pos-52];groupKey='lane'+pi+t.pos}else{cell=lanes[pi][5];groupKey='done'+pi+ti}
+let p=xy(cell);let n=occupied[groupKey]||0;occupied[groupKey]=n+1;let offsets=[[0,0],[-7,-7],[7,-7],[-7,7],[7,7]];let off=offsets[n%offsets.length];let x=p.x+off[0],y=p.y+off[1];ctx.beginPath();ctx.arc(x,y,13,0,Math.PI*2);ctx.fillStyle=colors[pi];ctx.fill();ctx.lineWidth=(pi===current&&rolled&&legal.includes(ti))?4:2;ctx.strokeStyle=(pi===current&&rolled&&legal.includes(ti))?'#111827':'#fff';ctx.stroke();ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();t._hit={x,y,r:17,ti,pi};}));
+}
+function canMove(t,d){if(t.pos===-1)return d===6;if(t.pos>=57)return false;return t.pos+d<=57}
+function getLegal(){return tokens[current].map((t,i)=>canMove(t,dice)?i:-1).filter(i=>i>=0)}
+function roll(){if(finished||rolled)return;dice=Math.floor(Math.random()*6)+1;document.getElementById('dice').textContent=['','⚀','⚁','⚂','⚃','⚄','⚅'][dice];rolled=true;legal=getLegal();document.getElementById('state').textContent='পাশা: '+dice;if(legal.length===0){document.getElementById('message').textContent=names[current]+' খেলোয়াড়ের কোনো বৈধ চাল নেই। পরের খেলোয়াড়ের পালা।';setTimeout(nextTurn,1100)}else{document.getElementById('message').textContent=legal.length===1?'চাল দেওয়ার জন্য হাইলাইট করা গুটিতে চাপ দিন।':'চাল দেওয়ার জন্য একটি হাইলাইট করা গুটি বেছে নিন।';render()}updateUI()}
+function moveToken(ti){if(!rolled||!legal.includes(ti)||finished)return;let t=tokens[current][ti];if(t.pos===-1)t.pos=0;else t.pos+=dice;let captured=0;if(t.pos<52){let global=(starts[current]+t.pos)%52;if(!safe.has(global)){tokens.forEach((arr,pi)=>{if(pi!==current)arr.forEach(ot=>{if(ot.pos>=0&&ot.pos<52&&(starts[pi]+ot.pos)%52===global){ot.pos=-1;captured++}})})}}
+let won=tokens[current].every(x=>x.pos===57);if(won){finished=true;document.getElementById('state').textContent='বিজয়ী!';document.getElementById('message').textContent='🏆 '+names[current]+' খেলোয়াড় জিতেছেন! নতুন গেম চাপুন আবার খেলতে।';}else{document.getElementById('message').textContent=(captured?captured+'টি প্রতিপক্ষের গুটি কাটা হয়েছে। ':'')+(dice===6?'৬ পেয়েছেন, আবার পাশা ফেলুন।':'চাল সম্পন্ন।');}
+let again=dice===6&&!finished;rolled=false;legal=[];render();updateUI();if(!again&&!finished){setTimeout(nextTurn,650)}else if(again){document.getElementById('state').textContent='আবার আপনার পালা';}}
+function nextTurn(){if(finished)return;current=(current+1)%4;rolled=false;legal=[];dice=0;document.getElementById('dice').textContent='⚀';document.getElementById('state').textContent='পালা বদল';document.getElementById('message').textContent=names[current]+' খেলোয়াড়, পাশা ফেলুন।';render();updateUI()}
+function updateUI(){document.getElementById('turn').textContent=emojis[current]+' '+names[current]+' খেলোয়াড়ের পালা';tokens.forEach((arr,i)=>document.getElementById('score'+i).textContent+='' );tokens.forEach((arr,i)=>document.getElementById('score'+i).textContent=arr.filter(t=>t.pos===57).length+'/4');document.getElementById('roll').disabled=rolled||finished;}
+canvas.addEventListener('click',e=>{let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*600/r.width,y=(e.clientY-r.top)*600/r.height;let hits=[];tokens[current].forEach((t,i)=>{let h=t._hit;if(h&&Math.hypot(x-h.x,y-h.y)<=h.r+5)hits.push(i)});for(let i of hits){if(legal.includes(i)){moveToken(i);return}}if(rolled&&legal.length){document.getElementById('message').textContent='হাইলাইট করা গুটিগুলোর একটিতে চাপ দিন।'}});
+document.getElementById('roll').addEventListener('click',roll);document.getElementById('restart').addEventListener('click',reset);reset();
+})();
+</script></body></html>
